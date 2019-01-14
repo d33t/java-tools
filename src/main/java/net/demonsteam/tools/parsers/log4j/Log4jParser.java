@@ -84,7 +84,7 @@ public class Log4jParser {
 
 	private void parseFile(final File fileArg, final BufferedWriter writer, final AppArguments appArgs) throws ZipException, IOException {
 
-		if(fileArg.getPath().matches(".*\\.zip$")) {
+		if(fileArg.getPath().endsWith(".zip")) {
 			final ZipFile zipFile = new ZipFile(fileArg);
 
 			final Enumeration<? extends ZipEntry> entries = zipFile.entries();
@@ -122,7 +122,7 @@ public class Log4jParser {
 		final Map<String, LogEntry> uniqueLogEntries = new HashMap<>();
 		final Map<String, String> uniqueLogEntryBodyMap = new HashMap<>();
 		try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(inputStream))) {
-			final long lineNumber = 0l;
+			long lineNumber = 0l;
 			LogEntry logEntry;
 			while((logEntry = findNextEntry(writer, appArgs, uniqueLogEntries, inputReader, lineNumber)) != null) {
 				if(!logEntry.isLineFiltertMatching()) {

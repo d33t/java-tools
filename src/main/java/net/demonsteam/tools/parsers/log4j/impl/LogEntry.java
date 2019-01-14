@@ -182,8 +182,8 @@ public class LogEntry implements Comparable<LogEntry> {
 
 	@Override
 	public String toString() {
-		return String.format("\nMatches: %d, Date first match: %s, Date last match: %s, Multiline: %s, File: %s, Line: %s\n", this.count, this.sdf.format(this.firstOccurrenceDate),
-		                     this.sdf.format(this.lastOccurrenceDate), this.multiline, this.multiline ? this.tempFile.getPath() : "none", this.line);
+		return String.format("\n%s -> Count: %d, Date first match: %s, Date last match: %s, First match line number: %d, Multiline: %s",
+		                     this.md5Hex, this.count, this.sdf.format(this.firstOccurrenceDate), this.sdf.format(this.lastOccurrenceDate), this.lineNumber, this.multiline);
 	}
 
 	/**
