@@ -32,8 +32,8 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
  */
 public class LogEntry implements Comparable<LogEntry> {
 
-	private static final String FORMAT_REGEX_LINE_START = "^(.*)\\s\\*(%s)\\*\\s";
-	private static final Pattern PATTERN_LOG_LINE_START = Pattern.compile(String.format(FORMAT_REGEX_LINE_START, Arrays.stream(LogLevel.values()).map(l -> l.toString()).collect(Collectors.joining("|"))));
+	private static final String FORMAT_REGEX_LINE_START = "^([^\\*]+)\\*(%s)\\*\\s";
+	private static final Pattern PATTERN_LOG_LINE_START = Pattern.compile(String.format(FORMAT_REGEX_LINE_START + "(.*)", Arrays.stream(LogLevel.values()).map(l -> l.toString()).collect(Collectors.joining("|"))));
 
 	private String line;
 	private long lineNumber;
@@ -48,17 +48,24 @@ public class LogEntry implements Comparable<LogEntry> {
 	private boolean lineFilterMatching;
 	private File tempFile;
 	private boolean multiline;
+	private final String tempDirPath;
 
 	public LogEntry(final String line, final AppArguments appArgs) throws ParseException, IOException {
 		this.line = line;
+		this.tempDirPath = appArgs.getTempDir().getPath();
 		this.sdf = new SimpleDateFormat(appArgs.getLogDateFormat());
 		this.sortBy = appArgs.getOptSort();
-		final String logDate = extractLogDate(line);
-		if(logDate != null) {
-			this.firstOccurrenceDate = this.lastOccurrenceDate = this.sdf.parse(logDate);
-			this.md5Hex = DigestUtils.md5Hex(StringUtils.substringAfter(line, logDate));
-			this.tempFile = new File(appArgs.getTempDir() + "/" + this.md5Hex);
+		final Matcher matcher = PATTERN_LOG_LINE_START.matcher(line);
+		if(matcher.find()) {
 			this.newLogEntry = true;
+			this.firstOccurrenceDate = this.lastOccurrenceDate = this.sdf.parse(matcher.group(1).trim());
+			String hashable = StringUtils.defaultString(matcher.group(3));
+			if(hashable.charAt(0) == '[' && hashable.indexOf(']') > 0) {
+				hashable = StringUtils.substringAfterLast(hashable, "]").trim();
+			}
+			this.md5Hex = DigestUtils.md5Hex(hashable);
+		} else {
+			this.md5Hex = DigestUtils.md5Hex(line);
 		}
 		this.lineFilterMatching = line.matches(String.format(FORMAT_REGEX_LINE_START + appArgs.getOptUserPattern(), appArgs.getLogLevels().stream().map(l -> l.toString()).collect(Collectors.joining("|"))));
 
@@ -133,12 +140,11 @@ public class LogEntry implements Comparable<LogEntry> {
 
 	public void appendBody(final String line) throws IOException {
 		if(this.tempFile == null) {
-			LogLevel.ERROR.printToConsole("Can't write line to temp file. Temp file is not initialized. Line: %s", line);
-			return;
+			this.tempFile = new File(this.tempDirPath + "/" + this.md5Hex);
 		}
 		this.multiline = true;
 		try (BufferedWriter bw = new BufferedWriter(new FileWriter(this.tempFile, true))) {
-			bw.write(line + "\n");
+			bw.write(line);
 		}
 	}
 
@@ -182,7 +188,7 @@ public class LogEntry implements Comparable<LogEntry> {
 
 	@Override
 	public String toString() {
-		return String.format("\n%s -> Count: %d, Date first match: %s, Date last match: %s, First match line number: %d, Multiline: %s",
+		return String.format("%s -> Count: %d, Date first match: %s, Date last match: %s, First match line number: %d, Multiline: %s",
 		                     this.md5Hex, this.count, this.sdf.format(this.firstOccurrenceDate), this.sdf.format(this.lastOccurrenceDate), this.lineNumber, this.multiline);
 	}
 
@@ -197,7 +203,7 @@ public class LogEntry implements Comparable<LogEntry> {
 				writer.write(this.readBody() + "\n");
 			}
 		} catch(final IOException e) {
-			writer.write("Can't read the exception contents: " + e.getMessage());
+			LogLevel.ERROR.printlnToConsole("Can't read the exception contents: " + e.getMessage());
 		}
 	}
 

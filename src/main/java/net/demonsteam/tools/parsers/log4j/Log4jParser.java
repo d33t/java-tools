@@ -36,6 +36,7 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -45,6 +46,7 @@ import net.demonsteam.tools.parsers.log4j.impl.LogEntry;
 import net.demonsteam.tools.parsers.log4j.impl.LogLevel;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.time.StopWatch;
 
 /**
  * Parses log4j formatted files
@@ -58,7 +60,7 @@ public class Log4jParser {
 
 	public Log4jParser(final String... consoleArgs) {
 		final AppArguments appArgs = new AppArguments(consoleArgs);
-		LogLevel.INFO.printToConsole("###################################### App arguments ######################################\n%s", appArgs);
+		LogLevel.INFO.printlnToConsole("###################################### App arguments ######################################\n%s", appArgs);
 
 		try (BufferedWriter writer = new BufferedWriter(appArgs.isWriteToFileEnabled() ? new OutputStreamWriter(new FileOutputStream(appArgs.getOutputFilePath()), "UTF-8") : new OutputStreamWriter(System.out))) {
 			boolean cleanUp = false;
@@ -75,9 +77,9 @@ public class Log4jParser {
 				appArgs.getTempDir().delete();
 			}
 		} catch(final ZipException e) {
-			LogLevel.ERROR.printToConsole("Cannot read source from zip file: %s", e.getMessage());
+			LogLevel.ERROR.printlnToConsole("Cannot read source from zip file: %s", e.getMessage());
 		} catch(final IOException e) {
-			LogLevel.ERROR.printToConsole("Cannot read source from file: %s", e.getMessage());
+			LogLevel.ERROR.printlnToConsole("Cannot read source from file: %s", e.getMessage());
 			e.printStackTrace();
 		}
 	}
@@ -116,13 +118,14 @@ public class Log4jParser {
 
 	}
 
-	// TODO build md5 over the exception body and group such exceptions, ignore the first line as there may be other parameters making them look completely different
 	private void parseFile(final InputStream inputStream, final BufferedWriter writer, final String path, final AppArguments appArgs) {
-		LogLevel.INFO.printToConsole("###################################### START Parsing file %s ######################################", path);
+		LogLevel.INFO.printlnToConsole("###################################### START Parsing file %s ######################################", path);
+		StopWatch timeStopper = new StopWatch();
+		timeStopper.start();
 		final Map<String, LogEntry> uniqueLogEntries = new HashMap<>();
 		final Map<String, String> uniqueLogEntryBodyMap = new HashMap<>();
 		try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(inputStream))) {
-			long lineNumber = 0l;
+			AtomicLong lineNumber = new AtomicLong();
 			LogEntry logEntry;
 			while((logEntry = findNextEntry(writer, appArgs, uniqueLogEntries, inputReader, lineNumber)) != null) {
 				if(!logEntry.isLineFiltertMatching()) {
@@ -145,27 +148,32 @@ public class Log4jParser {
 			}
 
 			if(appArgs.isFlagUnique() && uniqueLogEntries.size() > 0) {
+				if(appArgs.isWriteToFileEnabled()) {
+					LogLevel.INFO.printlnToConsole("Unique exceptions count: %d", uniqueLogEntries.size());
+				}
+				LogLevel.INFO.println(writer, "Unique exceptions count: %d", uniqueLogEntries.size());
 				final List<LogEntry> sortedEntries = new ArrayList<>(uniqueLogEntries.values());
 				Collections.sort(sortedEntries);
 				for(final LogEntry entry: sortedEntries) {
-					writer.write(entry.toString()); // write stats
+					LogLevel.INFO.println(writer, entry.toString()); // write stats
 					entry.writeLogEntryData(writer);
 				}
 			}
 			writer.flush();
 		} catch(final IOException | ParseException e) {
-			LogLevel.ERROR.printToConsole("Cannot read source from file %s", path);
+			LogLevel.ERROR.printlnToConsole("Cannot read source from file %s", path);
 			e.printStackTrace();
 		}
-		LogLevel.INFO.printToConsole("###################################### END Parsing file %s ######################################", path);
+		timeStopper.stop();
+		LogLevel.INFO.printlnToConsole("###################################### END The file %s parsed in %s ######################################", path, timeStopper);
 	}
 
-	private LogEntry findNextEntry(final BufferedWriter writer, final AppArguments appArgs, final Map<String, LogEntry> localUniqueEntries, final BufferedReader inputReader, long lineNumber) throws IOException {
+	private LogEntry findNextEntry(final BufferedWriter writer, final AppArguments appArgs, final Map<String, LogEntry> localUniqueEntries, final BufferedReader inputReader, AtomicLong lineNumber) throws IOException {
 		String line = null;
 		try {
 			if((line = inputReader.readLine()) != null) {
 				final LogEntry logEntry = new LogEntry(line, appArgs);
-				logEntry.setLineNumber(++lineNumber);
+				logEntry.setLineNumber(lineNumber.incrementAndGet());
 
 				if(!logEntry.isLineFiltertMatching()) {
 					return logEntry;
@@ -173,41 +181,42 @@ public class Log4jParser {
 				if(localUniqueEntries.containsKey(logEntry.getMd5())) {
 					localUniqueEntries.get(logEntry.getMd5()).addDuplicate(line);
 					// ok, we have this one already, skip all body bytes if any other related lines
-					inputReader.mark(READ_AHEAD_LIMIT);
-					while((line = inputReader.readLine()) != null) {
-						lineNumber++;
-						final LogEntry nextLogEntry = new LogEntry(line, appArgs);
-						if(nextLogEntry.isNewLine()) {
-							lineNumber--;
-							inputReader.reset(); // we don't want to read any new entries, so reset the last line
-							break;
-						}
-						// just skip any content here
-						inputReader.mark(READ_AHEAD_LIMIT);
-					}
+					readContinuousLines(inputReader, appArgs, lineNumber);
+
 					return localUniqueEntries.get(logEntry.getMd5());
 				} else { // new entry
 					localUniqueEntries.put(logEntry.getMd5(), logEntry);
 
-					inputReader.mark(READ_AHEAD_LIMIT);
-					// read any body lines if any
-					while((line = inputReader.readLine()) != null) {
-						lineNumber++;
-						final LogEntry nextLogEntry = new LogEntry(line, appArgs);
-						if(nextLogEntry.isNewLine()) {
-							lineNumber--;
-							inputReader.reset(); // we don't want to read any new entries, so reset the last line
-							return logEntry;
-						}
-						logEntry.appendBody(line);
-						inputReader.mark(READ_AHEAD_LIMIT);
+					String body = readContinuousLines(inputReader, appArgs, lineNumber);
+					if(body != null) {
+						logEntry.appendBody(body);
 					}
 					return logEntry;
 				}
 			}
 		} catch(final ParseException e) {
-			LogLevel.FATAL.printToConsole("Can't parse the line '%s'. Details: %s. Writing the match to the output", line, e.getMessage());
+			LogLevel.FATAL.printlnToConsole("Can't parse the line '%s'. Details: %s. Writing the match to the output", line, e.getMessage());
 		}
 		return null;
+	}
+
+	private String readContinuousLines(final BufferedReader inputReader, AppArguments appArgs, AtomicLong lineNumber) throws IOException, ParseException {
+		inputReader.mark(READ_AHEAD_LIMIT);
+		StringBuilder body = new StringBuilder();
+		// read any body lines
+		String line = null;
+		while((line = inputReader.readLine()) != null) {
+			lineNumber.incrementAndGet();
+			final LogEntry nextLogEntry = new LogEntry(line, appArgs);
+			if(nextLogEntry.isNewLine()) {
+				lineNumber.decrementAndGet();
+				inputReader.reset(); // we don't want to read any new entries, so reset the last line
+				break;
+			}
+			body.append(line).append("\n");
+			inputReader.mark(READ_AHEAD_LIMIT);
+		}
+
+		return body.length() == 0 ? null : body.toString();
 	}
 }

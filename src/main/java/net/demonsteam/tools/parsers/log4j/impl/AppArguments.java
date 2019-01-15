@@ -38,7 +38,7 @@ public class AppArguments {
 	private static final String OPT_SORT = "sort";
 	private static final String FLAG_UNIQUE = "unique";
 
-	private List<LogLevel> logLevels = new ArrayList<LogLevel>();
+	private List<LogLevel> logLevels = new ArrayList<>();
 	private String regexLogLevels = StringUtils.EMPTY;
 	private String optUserPattern;
 	private String optInputSourcePath;
@@ -54,8 +54,8 @@ public class AppArguments {
 		cmdOptions.addOption(createOption(OPT_DATE_FORMAT, "Specify the log format of the log entries. Defaults to: " + DEFAULT_LOG_DATE_FORMAT, true, false));
 		cmdOptions.addOption(createOption(OPT_LOG_LEVEL, "A valid log4J log level: " + Arrays.toString(LogLevel.values()) + ". Multiple values can be separated by comma or space.", true, true));
 		cmdOptions.addOption(createOption(OPT_USER_PATTERN, "Pattern to match", true, false));
-		cmdOptions.addOption(createOption(OPT_INPUT_SOURCE_PATH, "Absolute path to logfile (text or zip)", true, true));
-		cmdOptions.addOption(createOption(OPT_OUTPUT_FILE_PATH, "Absolute path to output file", true, false));
+		cmdOptions.addOption(createOption(OPT_INPUT_SOURCE_PATH, "Absolute or relative to the current directory path to the logfile (text or zip)", true, true));
+		cmdOptions.addOption(createOption(OPT_OUTPUT_FILE_PATH, "Absolute or relative to the current directory path to the output file. If omitted the standard output is used.", true, false));
 		cmdOptions.addOption(createOption(FLAG_UNIQUE, "Unique lines with occurrence count", false, false));
 		cmdOptions.addOption(createOption(OPT_SORT, "Sort either by date or unique count. This option is only used when '" + FLAG_UNIQUE + "' flag is set. Default to date.", true, false));
 
@@ -77,13 +77,20 @@ public class AppArguments {
 				}
 			}
 			this.regexLogLevels = "\\*(" + this.regexLogLevels + ")\\*";
-			//this.optUserPattern = Pattern.quote(cmd.getOptionValue(OPT_USER_PATTERN, ".*"));
 			this.optUserPattern = cmd.getOptionValue(OPT_USER_PATTERN, ".*"); // defaults to any match
+
+			final String executionPath = System.getProperty("user.dir");
 			this.optInputSourcePath = cmd.getOptionValue(OPT_INPUT_SOURCE_PATH);
+			if(this.optInputSourcePath.charAt(0) != '/') {
+				this.optInputSourcePath = executionPath + "/" + this.optInputSourcePath;
+			}
 			this.inputFile = new File(this.optInputSourcePath);
 			this.optOutputFilePath = null;
 			if(cmd.hasOption(OPT_OUTPUT_FILE_PATH)) {
 				this.optOutputFilePath = cmd.getOptionValue(OPT_OUTPUT_FILE_PATH);
+				if(this.optOutputFilePath.charAt(0) != '/') {
+					this.optOutputFilePath = executionPath + "/" + this.optOutputFilePath;
+				}
 			}
 			this.optSort = cmd.getOptionValue(OPT_SORT, DEFAULT_VALUE_OPT_SORT);
 			this.flagUnique = cmd.hasOption(FLAG_UNIQUE);
