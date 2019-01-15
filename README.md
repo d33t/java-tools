@@ -24,11 +24,14 @@ java -jar target/java-tools-1.0-SNAPSHOT-jar-with-dependencies.jar <options>
 usage: log4jparser
  -d,--dateFormat <arg>   (optional) Specify the log format of the log
                          entries. Defaults to: dd.MM.yyyy HH:mm:ss.SSSS
- -i,--inputFile <arg>    Absolute path to logfile (text or zip)
+ -i,--inputFile <arg>    Absolute or relative to the current directory
+                         path to the logfile (text or zip)
  -l,--loglevel <arg>     A valid log4J log level: [FATAL, ERROR, WARN,
                          INFO, DEBUG, TRACE]. Multiple values can be
                          separated by comma or space.
- -o,--outputFile <arg>   (optional) Absolute path to output file
+ -o,--outputFile <arg>   (optional) Absolute or relative to the current
+                         directory path to the output file. If omitted the
+                         standard output is used.
  -p,--pattern <arg>      (optional) Pattern to match
  -s,--sort <arg>         (optional) Sort either by date or unique count.
                          This option is only used when 'unique' flag is
@@ -40,7 +43,7 @@ usage: log4jparser
 Extract, group and sort all `ERROR,FATAL` log level entries by there occurrence in the log file
 
 ```bash
-java -jar target/java-tools-1.0-SNAPSHOT-jar-with-dependencies.jar -i /tmp/mylog.log -l error,fatal -s count -u > output.log
+java -jar target/java-tools-1.0-SNAPSHOT-jar-with-dependencies.jar -l error,fatal -s count --unique -i /tmp/mylog.log -o output.log
 ```
 
 # License
