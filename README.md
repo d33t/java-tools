@@ -43,7 +43,7 @@ usage: log4jparser
 Extract, group and sort all `ERROR,FATAL` log level entries by there occurrence in the log file
 
 ```bash
-java -jar target/java-tools-1.0-SNAPSHOT-jar-with-dependencies.jar -l error,fatal -s count --unique -i /tmp/mylog.log -o output.log
+java -jar target/java-tools-2.0-SNAPSHOT-jar-with-dependencies.jar -l error,fatal -s count --unique -i /tmp/mylog.log -o output.log
 ```
 
 # License

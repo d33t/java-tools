@@ -1,5 +1,3 @@
-package net.demonsteam.tools.parsers.log4j;
-
 /* Copyright (C) <2015> <d33t>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,6 +16,7 @@ package net.demonsteam.tools.parsers.log4j;
  * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
  * OR OTHER DEALINGS IN THE SOFTWARE. */
+package net.demonsteam.tools.parsers.log4j;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
