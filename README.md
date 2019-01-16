@@ -3,23 +3,26 @@ Some small usefull java tools I wrote for various tasks.
 Currently only the log4jparser available
 
 # Log4jParser
-The log4jparser can be used to extract exception information from big log files filtering by log level and optional custom regular expression (tested with max 1GB, but probably will work also for bigger log files). The tool may also group, count and order the exceptions by certain criteria (currently only count and first date match supported). Same or similar exceptions are extracted by matching either the first log line or the exception body. The first line may differs as it contains sometimes information where the exception happend (e.g. different resources, different paths), but the exception body is mostly the same, so such exception will be grouped together.
+The log4jparser can be used to extract exception information from big log files filtering by log level and optional custom regular expression (tested with max 1GB, but probably will work also for bigger log files). The tool may also group, count and order the exceptions by certain criteria (currently only count and first date match supported). Same or similar exceptions are grouped by finding similar first log line or by comparing the exception body. The first line may differs as it contains sometimes information where the exception happened (e.g. different resources, different paths), but the exception body is mostly the same, so such exception will be grouped together.
 
 ## Requirements
  - java 8
- - write access to the directory where the file is analyzed
+ - write access to the directory where the file is analyzed (used to create temporary files while sorting big files)
 
 ## Usage
-Build the project with maven:
+### Download and build
+Clone from git and build with maven:
 
 ```bash
+git clone https://github.com/d33t/java-tools.git
+cd java-tools/
 mvn clean compile assembly:single install
 ```
-
-Run the project directory:
+### First run and usage
+Run from the project directory:
 
 ```bash
-java -jar target/java-tools-1.0-SNAPSHOT-jar-with-dependencies.jar <options>
+java -jar target/java-tools-2.0-SNAPSHOT-jar-with-dependencies.jar <options>
 
 usage: log4jparser
  -d,--dateFormat <arg>   (optional) Specify the log format of the log
@@ -40,10 +43,21 @@ usage: log4jparser
  ```
  
 ## Examples
+### Set alias in your bash profile
+If you don't want to remember or write so much every time you want to run the tool, just create a suitable alias. You can even set there some java parameter (for example more memory).
+
+File: ~/.profile
+
+```bash
+log4jparser_current=~/.m2/repository/net/demonsteam/tools/java-tools/2.0-SNAPSHOT/java-tools-2.0-SNAPSHOT-jar-with-dependencies.jar
+alias log4jparser="java -Xms512m -Xmx1g -jar $log4jparser_current"
+```
+
+### Group, Count, Sort
 Extract, group and sort all `ERROR,FATAL` log level entries by there occurrence in the log file
 
 ```bash
-java -jar target/java-tools-2.0-SNAPSHOT-jar-with-dependencies.jar -l error,fatal -s count --unique -i /tmp/mylog.log -o output.log
+log4jparser -l error,fatal -s count --unique -i /tmp/mylog.log -o output.log
 ```
 
 # License
