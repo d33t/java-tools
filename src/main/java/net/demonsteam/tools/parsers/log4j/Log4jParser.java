@@ -40,7 +40,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-import net.demonsteam.tools.parsers.log4j.impl.AppArguments;
+import net.demonsteam.tools.parsers.log4j.impl.Log4jParserArgs;
 import net.demonsteam.tools.parsers.log4j.impl.LogEntry;
 import net.demonsteam.tools.parsers.log4j.impl.LogLevel;
 
@@ -57,8 +57,9 @@ public class Log4jParser {
 
 	private static final int READ_AHEAD_LIMIT = (512 * 1000) / 8; // limit to 512KB of characters
 
-	public Log4jParser(final String... consoleArgs) {
-		final AppArguments appArgs = new AppArguments(consoleArgs);
+	public static void main(final String... consoleArgs) {
+		final Log4jParserArgs appArgs = new Log4jParserArgs(consoleArgs);
+		appArgs.postInit();
 		LogLevel.INFO.printlnToConsole("###################################### App arguments ######################################\n%s", appArgs);
 
 		try (BufferedWriter writer = new BufferedWriter(appArgs.isWriteToFileEnabled() ? new OutputStreamWriter(new FileOutputStream(appArgs.getOutputFilePath()), "UTF-8") : new OutputStreamWriter(System.out))) {
@@ -67,7 +68,7 @@ public class Log4jParser {
 				cleanUp = appArgs.getTempDir().mkdir();
 			}
 
-			parseFile(appArgs.getInputFile(), writer, appArgs);
+			new Log4jParser().parseFile(appArgs.getInputFile(), writer, appArgs);
 
 			if(cleanUp) {
 				for(final File tmpFile: appArgs.getTempDir().listFiles()) {
@@ -83,7 +84,7 @@ public class Log4jParser {
 		}
 	}
 
-	private void parseFile(final File fileArg, final BufferedWriter writer, final AppArguments appArgs) throws ZipException, IOException {
+	private void parseFile(final File fileArg, final BufferedWriter writer, final Log4jParserArgs appArgs) throws ZipException, IOException {
 
 		if(fileArg.getPath().endsWith(".zip")) {
 			final ZipFile zipFile = new ZipFile(fileArg);
@@ -117,7 +118,7 @@ public class Log4jParser {
 
 	}
 
-	private void parseFile(final InputStream inputStream, final BufferedWriter writer, final String path, final AppArguments appArgs) {
+	private void parseFile(final InputStream inputStream, final BufferedWriter writer, final String path, final Log4jParserArgs appArgs) {
 		LogLevel.INFO.printlnToConsole("###################################### START Parsing file %s ######################################", path);
 		StopWatch timeStopper = new StopWatch();
 		timeStopper.start();
@@ -167,7 +168,7 @@ public class Log4jParser {
 		LogLevel.INFO.printlnToConsole("###################################### END The file %s parsed in %s ######################################", path, timeStopper);
 	}
 
-	private LogEntry findNextEntry(final BufferedWriter writer, final AppArguments appArgs, final Map<String, LogEntry> localUniqueEntries, final BufferedReader inputReader, AtomicLong lineNumber) throws IOException {
+	private LogEntry findNextEntry(final BufferedWriter writer, final Log4jParserArgs appArgs, final Map<String, LogEntry> localUniqueEntries, final BufferedReader inputReader, AtomicLong lineNumber) throws IOException {
 		String line = null;
 		try {
 			if((line = inputReader.readLine()) != null) {
@@ -199,7 +200,7 @@ public class Log4jParser {
 		return null;
 	}
 
-	private String readContinuousLines(final BufferedReader inputReader, AppArguments appArgs, AtomicLong lineNumber) throws IOException, ParseException {
+	private String readContinuousLines(final BufferedReader inputReader, Log4jParserArgs appArgs, AtomicLong lineNumber) throws IOException, ParseException {
 		inputReader.mark(READ_AHEAD_LIMIT);
 		StringBuilder body = new StringBuilder();
 		// read any body lines

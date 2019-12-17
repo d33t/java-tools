@@ -18,7 +18,15 @@
  * OR OTHER DEALINGS IN THE SOFTWARE. */
 package net.demonsteam.tools;
 
+import java.util.Arrays;
+
+import net.demonsteam.tools.args.BaseArgs;
+import net.demonsteam.tools.ascii.TextPathToAscii;
 import net.demonsteam.tools.parsers.log4j.Log4jParser;
+
+import org.apache.commons.cli.Options;
+
+import lombok.Getter;
 
 /**
  * Application main class and starting point for running the different tools
@@ -29,10 +37,56 @@ import net.demonsteam.tools.parsers.log4j.Log4jParser;
 public class ToolsRunner {
 
 	/**
-	 * @param args
+	 * The tool args. <br>
+	 * Required --tool/-t to choose the tool to run
+	 *
+	 * @param args - the tool args
 	 */
 	public static void main(final String[] args) {
-		new Log4jParser(args);
+		ToolsRunnerArgs toolsArgs = new ToolsRunnerArgs(args);
+		toolsArgs.postInit();
+		String[] appArgs = toolsArgs.getParser().getLastParsedUnknownArgs();
+
+		switch(toolsArgs.getTool()) {
+			case LOG4J_PARSER: {
+				Log4jParser.main(appArgs);
+				break;
+			}
+			case PATH_TO_ASCII: {
+				TextPathToAscii.main(appArgs);
+				break;
+			}
+			default: {
+				toolsArgs.printUsageAndExit();
+			}
+		}
 	}
 
+	private static class ToolsRunnerArgs extends BaseArgs {
+
+		private static final String OPT_TOOL = "tool";
+
+		@Getter
+		private Tool tool;
+
+		public ToolsRunnerArgs(final String[] args) {
+			super("ToolsRunner", args);
+		}
+
+		@Override
+		public void postInit() {
+			try {
+				this.tool = Tool.valueOf(getCommandLine().getOptionValue(OPT_TOOL, Tool.DEFAULT.toString()).toUpperCase());
+			} catch(IllegalArgumentException e) {
+				this.tool = Tool.DEFAULT;
+			}
+		}
+
+		@Override
+		public Options getCmdOptions() {
+			final Options cmdOptions = new Options();
+			cmdOptions.addOption(createOption(OPT_TOOL, "Specify the tool to run. Tools: " + Arrays.toString(Tool.values()), true, true));
+			return cmdOptions;
+		}
+	}
 }

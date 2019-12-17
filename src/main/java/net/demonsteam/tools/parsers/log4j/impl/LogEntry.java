@@ -65,7 +65,7 @@ public class LogEntry implements Comparable<LogEntry> {
 	private boolean multiline;
 	private final String tempDirPath;
 
-	public LogEntry(final String line, final AppArguments appArgs) throws ParseException, IOException {
+	public LogEntry(final String line, final Log4jParserArgs appArgs) throws ParseException, IOException {
 		this.line = line;
 		this.tempDirPath = appArgs.getTempDir().getPath();
 		this.sdf = new SimpleDateFormat(appArgs.getLogDateFormat());
@@ -172,7 +172,7 @@ public class LogEntry implements Comparable<LogEntry> {
 	 */
 	@Override
 	public int compareTo(final LogEntry o) {
-		if(AppArguments.DEFAULT_VALUE_OPT_SORT.equals(this.sortBy)) {
+		if(Log4jParserArgs.DEFAULT_VALUE_OPT_SORT.equals(this.sortBy)) {
 			if(this.firstOccurrenceDate == null && o.firstOccurrenceDate == null) {
 				return 0;
 			}
