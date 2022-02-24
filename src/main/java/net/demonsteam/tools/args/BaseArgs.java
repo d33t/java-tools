@@ -1,6 +1,11 @@
 /* Copyright (C) <2019> <Rusi Rusev> rusev@aemdev.de */
 package net.demonsteam.tools.args;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import net.demonsteam.tools.parsers.log4j.impl.Log4jParserArgs;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
@@ -21,14 +26,15 @@ public abstract class BaseArgs {
 
 	private final String toolName;
 	@Getter
-	private IngoreUnknownParser parser;
+	private IgnoreUnknownParser parser;
 	private final HelpFormatter helpFormatter;
 	private String[] args;
-
-	public BaseArgs(String toolName, String[] args) {
+	private List<String> shortOptions = new ArrayList<>();
+	
+	protected BaseArgs(String toolName, String[] args) {
 		this.toolName = toolName;
 		this.args = args;
-		this.parser = new IngoreUnknownParser();
+		this.parser = new IgnoreUnknownParser();
 		this.helpFormatter = new HelpFormatter();
 	}
 
@@ -53,11 +59,24 @@ public abstract class BaseArgs {
 	}
 
 	protected Option createOption(final String longOpt, final String description, final boolean hasArgs, final boolean required) {
-		final Option opt = new Option(longOpt.charAt(0) + "", longOpt, hasArgs, (required ? "" : "(optional) ") + description);
+		String shortOption = computeShortOption(longOpt);
+		final Option opt = new Option(shortOption, longOpt, hasArgs, (required ? "" : "(optional) ") + description);
 		opt.setRequired(required);
 		return opt;
 	}
-
+	
+	protected String computeShortOption(String longOpt) {
+		StringBuilder soBuilder = new StringBuilder();
+		for(int i = 0; i < longOpt.length(); i++) {
+			soBuilder.append(longOpt.charAt(i));
+			if(!shortOptions.contains(soBuilder.toString())) {
+				break;
+			}
+		}
+		String shortOption = soBuilder.toString();
+		shortOptions.add(shortOption);
+		return shortOption;
+	}
 	@Override
 	public String toString() {
 		return ToStringBuilder.reflectionToString(this, ToStringStyle.SHORT_PREFIX_STYLE);

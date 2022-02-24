@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,7 +63,7 @@ public class Log4jParser {
 		appArgs.postInit();
 		LogLevel.INFO.printlnToConsole("###################################### App arguments ######################################\n%s", appArgs);
 
-		try (BufferedWriter writer = new BufferedWriter(appArgs.isWriteToFileEnabled() ? new OutputStreamWriter(new FileOutputStream(appArgs.getOutputFilePath()), "UTF-8") : new OutputStreamWriter(System.out))) {
+		try (BufferedWriter writer = new BufferedWriter(appArgs.isWriteToFileEnabled() ? new OutputStreamWriter(new FileOutputStream(appArgs.getOptOutputFilePath()), StandardCharsets.UTF_8) : new OutputStreamWriter(System.out))) {
 			boolean cleanUp = false;
 			if(!appArgs.getTempDir().exists()) {
 				cleanUp = appArgs.getTempDir().mkdir();
@@ -84,27 +85,21 @@ public class Log4jParser {
 		}
 	}
 
-	private void parseFile(final File fileArg, final BufferedWriter writer, final Log4jParserArgs appArgs) throws ZipException, IOException {
+	private void parseFile(final File fileArg, final BufferedWriter writer, final Log4jParserArgs appArgs) throws IOException {
 
 		if(fileArg.getPath().endsWith(".zip")) {
-			final ZipFile zipFile = new ZipFile(fileArg);
-
-			final Enumeration<? extends ZipEntry> entries = zipFile.entries();
-			final List<? extends ZipEntry> contentEntries = Collections.list(entries);
-			Collections.sort(contentEntries, new Comparator<ZipEntry>() {
-
-				@Override
-				public int compare(final ZipEntry first, final ZipEntry second) {
-					return first.getName().compareTo(second.getName());
+			try(final ZipFile zipFile = new ZipFile(fileArg)) {
+				final Enumeration<? extends ZipEntry> entries = zipFile.entries();
+				final List<? extends ZipEntry> contentEntries = Collections.list(entries);
+				Collections.sort(contentEntries, (first, second) -> first.getName().compareTo(second.getName()));
+				
+				for(final ZipEntry contentEntry: contentEntries) {
+					if(contentEntry.isDirectory()) {
+						continue; //TODO implement directory tree walking within the archive
+					}
+					parseFile(zipFile.getInputStream(contentEntry), writer, fileArg.getPath() + "/" + contentEntry.getName(), appArgs);
 				}
-			});
-			for(final ZipEntry contentEntry: contentEntries) {
-				if(contentEntry.isDirectory()) {
-					continue; //TODO implement directory tree walking within the archive
-				}
-				parseFile(zipFile.getInputStream(contentEntry), writer, fileArg.getPath() + "/" + contentEntry.getName(), appArgs);
 			}
-			zipFile.close();
 		} else if(fileArg.isDirectory()) {
 			final File[] files = fileArg.listFiles();
 			if(files.length > 0) {
@@ -127,19 +122,19 @@ public class Log4jParser {
 		try (final BufferedReader inputReader = new BufferedReader(new InputStreamReader(inputStream))) {
 			AtomicLong lineNumber = new AtomicLong();
 			LogEntry logEntry;
-			while((logEntry = findNextEntry(writer, appArgs, uniqueLogEntries, inputReader, lineNumber)) != null) {
-				if(!logEntry.isLineFiltertMatching()) {
+			while((logEntry = findNextEntry(appArgs, uniqueLogEntries, inputReader, lineNumber)) != null) {
+				if(!logEntry.isLineFilterMatching()) {
 					continue;
 				}
 				if(appArgs.isFlagUnique()) {
 					final String bodyMd5 = logEntry.getBodyMd5();
 					if(uniqueLogEntryBodyMap.containsKey(bodyMd5)) {
 						final String mappedEntryMd5 = uniqueLogEntryBodyMap.get(bodyMd5);
-						uniqueLogEntries.get(mappedEntryMd5).addDuplicate(logEntry.getLine());
+						uniqueLogEntries.get(mappedEntryMd5).addDuplicate(logEntry);
 					} else {
-						uniqueLogEntries.put(logEntry.getMd5(), logEntry);
+						uniqueLogEntries.put(logEntry.getMd5Hex(), logEntry);
 						if(StringUtils.isNotBlank(bodyMd5)) {
-							uniqueLogEntryBodyMap.put(bodyMd5, logEntry.getMd5());
+							uniqueLogEntryBodyMap.put(bodyMd5, logEntry.getMd5Hex());
 						}
 					}
 				} else {
@@ -160,7 +155,7 @@ public class Log4jParser {
 				}
 			}
 			writer.flush();
-		} catch(final IOException | ParseException e) {
+		} catch(final IOException e) {
 			LogLevel.ERROR.printlnToConsole("Cannot read source from file %s", path);
 			e.printStackTrace();
 		}
@@ -168,24 +163,24 @@ public class Log4jParser {
 		LogLevel.INFO.printlnToConsole("###################################### END The file %s parsed in %s ######################################", path, timeStopper);
 	}
 
-	private LogEntry findNextEntry(final BufferedWriter writer, final Log4jParserArgs appArgs, final Map<String, LogEntry> localUniqueEntries, final BufferedReader inputReader, AtomicLong lineNumber) throws IOException {
+	private LogEntry findNextEntry(final Log4jParserArgs appArgs, final Map<String, LogEntry> localUniqueEntries, final BufferedReader inputReader, AtomicLong lineNumber) throws IOException {
 		String line = null;
 		try {
 			if((line = inputReader.readLine()) != null) {
 				final LogEntry logEntry = new LogEntry(line, appArgs);
 				logEntry.setLineNumber(lineNumber.incrementAndGet());
 
-				if(!logEntry.isLineFiltertMatching()) {
+				if(!logEntry.isLineFilterMatching()) {
 					return logEntry;
 				}
-				if(localUniqueEntries.containsKey(logEntry.getMd5())) {
-					localUniqueEntries.get(logEntry.getMd5()).addDuplicate(line);
+				if(localUniqueEntries.containsKey(logEntry.getMd5Hex())) {
+					localUniqueEntries.get(logEntry.getMd5Hex()).addDuplicate(logEntry);
 					// ok, we have this one already, skip all body bytes if any other related lines
 					readContinuousLines(inputReader, appArgs, lineNumber);
 
-					return localUniqueEntries.get(logEntry.getMd5());
+					return localUniqueEntries.get(logEntry.getMd5Hex());
 				} else { // new entry
-					localUniqueEntries.put(logEntry.getMd5(), logEntry);
+					localUniqueEntries.put(logEntry.getMd5Hex(), logEntry);
 
 					String body = readContinuousLines(inputReader, appArgs, lineNumber);
 					if(body != null) {
@@ -208,7 +203,7 @@ public class Log4jParser {
 		while((line = inputReader.readLine()) != null) {
 			lineNumber.incrementAndGet();
 			final LogEntry nextLogEntry = new LogEntry(line, appArgs);
-			if(nextLogEntry.isNewLine()) {
+			if(nextLogEntry.isNewLogEntry()) {
 				lineNumber.decrementAndGet();
 				inputReader.reset(); // we don't want to read any new entries, so reset the last line
 				break;

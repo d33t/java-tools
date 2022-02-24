@@ -25,6 +25,8 @@ import net.demonsteam.tools.ascii.TextPathToAscii;
 import net.demonsteam.tools.parsers.log4j.Log4jParser;
 
 import org.apache.commons.cli.Options;
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import lombok.Getter;
 
@@ -69,6 +71,9 @@ public class ToolsRunner {
 		@Getter
 		private Tool tool;
 
+		@Getter(lazy = true)
+		private final Options cmdOptions = initCmdOptions();
+		
 		public ToolsRunnerArgs(final String[] args) {
 			super("ToolsRunner", args);
 		}
@@ -82,11 +87,12 @@ public class ToolsRunner {
 			}
 		}
 
-		@Override
-		public Options getCmdOptions() {
-			final Options cmdOptions = new Options();
-			cmdOptions.addOption(createOption(OPT_TOOL, "Specify the tool to run. Tools: " + Arrays.toString(Tool.values()), true, true));
-			return cmdOptions;
+		public Options initCmdOptions() {
+			final Options options = new Options();
+			final Tool[] availableTools = Tool.values();
+			options.addOption(createOption(OPT_TOOL, 
+			                               "Specify the tool to run. Tools: " + StringUtils.join(ArrayUtils.subarray(availableTools, 1, availableTools.length), ", "), true, true));
+			return options;
 		}
 	}
 }

@@ -33,11 +33,15 @@ import java.util.Date;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
+
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * Represents a single line of log file
@@ -47,75 +51,86 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
  */
 public class LogEntry implements Comparable<LogEntry> {
 
-	private static final String FORMAT_REGEX_LINE_START = "^([^\\*]+)\\*(%s)\\*\\s";
-	private static final Pattern PATTERN_LOG_LINE_START = Pattern.compile(String.format(FORMAT_REGEX_LINE_START + "(.*)", Arrays.stream(LogLevel.values()).map(l -> l.toString()).collect(Collectors.joining("|"))));
-
+	
+	// matching lines of the following form
+	// 16.02.2022 00:00:00.528 *INFO* [service details] message details 
+	private static final String FORMAT_LLS_REGEX = "^([^\\*]+)\\*(%s)\\*\\s((\\[.+(?=\\])\\]))?";
+	// log line start (LLS) pattern 
+	private static final Pattern LLS_PATTERN = Pattern.compile(String.format(FORMAT_LLS_REGEX + "(.*)", Arrays.stream(LogLevel.values()).map(LogLevel::toString).collect(Collectors.joining("|"))));
+	// service details regex
+	private static final String SD_REGEX = "\\[.*?(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE|PATCH)\\s(/[^\\s]+)\\sHTTP/1\\.[0-1]\\]";
+	private static final Pattern SD_PATTERN = Pattern.compile(SD_REGEX);
+	
+	private static final int LLS_GROUP_DATE = 1;
+	private static final int LLS_GROUP_LOG_LEVEL = 2;
+	private static final int LLS_GROUP_SERVICE_DETAILS = 4;
+	private static final int LLS_GROUP_MESSAGE = 5;
+	
+	private static final int SD_GROUP_HTTP_METHOD = 1;
+	private static final int SD_GROUP_HTTP_URL = 2;
+	
+	@Getter
 	private String line;
+	@Getter @Setter
 	private long lineNumber;
 	private final SimpleDateFormat sdf;
+	@Getter
 	private String md5Hex;
 	private String bodyMd5Hex;
 	private Date firstOccurrenceDate;
 	private Date lastOccurrenceDate;
-	private long count = 0l;
+	@Getter
+	private long count;
 	private String sortBy;
+	@Getter
 	private boolean newLogEntry;
+	@Getter
 	private boolean lineFilterMatching;
 	private File tempFile;
+	@Getter
 	private boolean multiline;
 	private final String tempDirPath;
-
-	public LogEntry(final String line, final Log4jParserArgs appArgs) throws ParseException, IOException {
+	@Getter
+	private LogLevel logLevel;
+	@Getter
+	private String serviceDetails;
+	@Getter
+	private String httpMethod;
+	@Getter
+	private String httpUrl;
+	
+	private boolean urlInfoEnabled;
+	
+	public LogEntry(final String line, final Log4jParserArgs appArgs) throws ParseException {
 		this.line = line;
 		this.tempDirPath = appArgs.getTempDir().getPath();
 		this.sdf = new SimpleDateFormat(appArgs.getLogDateFormat());
+		this.count = 1l;
 		this.sortBy = appArgs.getOptSort();
-		final Matcher matcher = PATTERN_LOG_LINE_START.matcher(line);
-		if(matcher.find()) {
+		final Matcher llsMatcher = LLS_PATTERN.matcher(line);
+		if(llsMatcher.find()) {
 			this.newLogEntry = true;
-			this.firstOccurrenceDate = this.lastOccurrenceDate = this.sdf.parse(matcher.group(1).trim());
-			String hashable = StringUtils.defaultString(matcher.group(3));
-			if(hashable.charAt(0) == '[' && hashable.indexOf(']') > 0) {
-				hashable = StringUtils.substringAfterLast(hashable, "]").trim();
-			}
+			this.firstOccurrenceDate = this.lastOccurrenceDate = this.sdf.parse(llsMatcher.group(LLS_GROUP_DATE).trim());
+			String hashable = StringUtils.defaultString(llsMatcher.group(LLS_GROUP_MESSAGE));
 			this.md5Hex = DigestUtils.md5Hex(hashable);
+			this.logLevel = LogLevel.valueOf(llsMatcher.group(LLS_GROUP_LOG_LEVEL));
+			this.serviceDetails = llsMatcher.group(LLS_GROUP_SERVICE_DETAILS);
+			if(StringUtils.isNotBlank(serviceDetails)) {
+				final Matcher sdMatcher = SD_PATTERN.matcher(this.serviceDetails);
+				if(sdMatcher.find()) {
+					this.httpMethod = sdMatcher.group(SD_GROUP_HTTP_METHOD);
+					this.httpUrl = sdMatcher.group(SD_GROUP_HTTP_URL);
+				}
+			}
 		} else {
 			this.md5Hex = DigestUtils.md5Hex(line);
 		}
-		this.lineFilterMatching = line.matches(String.format(FORMAT_REGEX_LINE_START + appArgs.getOptUserPattern(), appArgs.getLogLevels().stream().map(l -> l.toString()).collect(Collectors.joining("|"))));
-
-	}
-
-	/**
-	 * @return the line
-	 */
-	public String getLine() {
-		return this.line;
-	}
-
-	/**
-	 * @param lineNumber the lineNumber to set
-	 */
-	public void setLineNumber(final long lineNumber) {
-		this.lineNumber = lineNumber;
-	}
-
-	/**
-	 * @return the lineNumber
-	 */
-	public long getLineNumber() {
-		return this.lineNumber;
-	}
-
-	/**
-	 * @return the multiline
-	 */
-	public boolean isMultiline() {
-		return this.multiline;
-	}
-
-	public String getMd5() {
-		return this.md5Hex;
+		final String customUserPatternFormat = FORMAT_LLS_REGEX + appArgs.getOptUserPattern();
+		String userPattern = String.format(customUserPatternFormat, appArgs.getLogLevels().stream()
+		                                   									.map(LogLevel::toString)
+		                                   									.collect(Collectors.joining("|")));
+		this.lineFilterMatching = line.matches(userPattern);
+		this.urlInfoEnabled = appArgs.isFlagUrlInfo();
 	}
 
 	public String getBodyMd5() throws IOException {
@@ -125,37 +140,38 @@ public class LogEntry implements Comparable<LogEntry> {
 		return this.bodyMd5Hex;
 	}
 
-	public boolean isNewLine() {
-		return this.newLogEntry;
-	}
-
-	/**
-	 * @return the lineMatches
-	 */
-	public boolean isLineFiltertMatching() {
-		return this.lineFilterMatching;
-	}
-
-	public long addDuplicate(final String line) throws ParseException {
-		final String logDate = extractLogDate(line);
-		if(logDate != null) {
-			this.lastOccurrenceDate = this.sdf.parse(logDate);
+	public long addDuplicate(final LogEntry logEntry) throws IOException {
+		if(logEntry != null) {
+			this.lastOccurrenceDate = logEntry.firstOccurrenceDate;
+			appendUrl(logEntry);
 		}
 		return ++this.count;
 	}
 
-	private String extractLogDate(final String line) {
-		final Matcher matcher = PATTERN_LOG_LINE_START.matcher(line);
-		return matcher.find() ? matcher.group(1) : null;
+	public void appendUrl(final LogEntry logEntry) throws IOException {
+		if(urlInfoEnabled && StringUtils.isNotBlank(logEntry.getHttpUrl())) {
+			File tempUrlFile = new File(this.tempDirPath, this.md5Hex + "_urls");
+			boolean tempUrlFileExists = tempUrlFile.exists();
+			boolean entryExists = false;
+			if(tempUrlFileExists) {
+				try(Stream<String> urlStream = Files.lines(Paths.get(tempUrlFile.getPath()))) {
+					entryExists = urlStream.anyMatch(url -> url.contains(logEntry.getHttpUrl()));
+				}	
+			}
+			if(!entryExists) {
+				try (BufferedWriter bw = new BufferedWriter(new FileWriter(tempUrlFile, true))) {
+					if(!tempUrlFileExists) {
+						bw.write(this.getHttpMethod() + " " + this.getHttpUrl() + "\n");
+					}
+					bw.write(logEntry.getHttpMethod() + " " + logEntry.getHttpUrl() + "\n");
+				}	
+			}
+		}
 	}
-
-	public long getCount() {
-		return this.count;
-	}
-
+	
 	public void appendBody(final String line) throws IOException {
 		if(this.tempFile == null) {
-			this.tempFile = new File(this.tempDirPath + "/" + this.md5Hex);
+			this.tempFile = new File(this.tempDirPath, this.md5Hex);
 		}
 		this.multiline = true;
 		try (BufferedWriter bw = new BufferedWriter(new FileWriter(this.tempFile, true))) {
@@ -163,10 +179,25 @@ public class LogEntry implements Comparable<LogEntry> {
 		}
 	}
 
-	public String readBody() throws IOException {
-		return new String(Files.readAllBytes(Paths.get(this.tempFile.getPath())), StandardCharsets.UTF_8);
+	private String readFile(File file) throws IOException {
+		return new String(Files.readAllBytes(Paths.get(file.getPath())), StandardCharsets.UTF_8);
 	}
-
+	
+	public void writeLogEntryData(final BufferedWriter writer) throws IOException {
+		try {
+			writer.write(this.line + "\n");
+			if(this.tempFile != null && this.tempFile.exists()) {
+				writer.write(this.readFile(this.tempFile) + "\n");
+			}
+			File tempUrlFile = new File(this.tempDirPath, this.md5Hex + "_urls");
+			if(urlInfoEnabled && tempUrlFile.exists()) {
+				writer.write(this.readFile(tempUrlFile) + "\n");
+			}
+		} catch(final IOException e) {
+			LogLevel.ERROR.printlnToConsole("Can't read the exception contents: " + e.getMessage());
+		}
+	}
+	
 	/* (non-Javadoc)
 	 * @see java.lang.Comparable#compareTo(java.lang.Object)
 	 */
@@ -189,7 +220,7 @@ public class LogEntry implements Comparable<LogEntry> {
 
 	@Override
 	public boolean equals(final Object other) {
-		if(other == null || !(other instanceof LogEntry)) {
+		if(!(other instanceof LogEntry)) {
 			return false;
 		}
 		final LogEntry o = (LogEntry) other;
@@ -206,20 +237,4 @@ public class LogEntry implements Comparable<LogEntry> {
 		return String.format("%s -> Count: %d, Date first match: %s, Date last match: %s, First match line number: %d, Multiline: %s",
 		                     this.md5Hex, this.count, this.sdf.format(this.firstOccurrenceDate), this.sdf.format(this.lastOccurrenceDate), this.lineNumber, this.multiline);
 	}
-
-	/**
-	 * @param writer
-	 * @throws IOException
-	 */
-	public void writeLogEntryData(final BufferedWriter writer) throws IOException {
-		try {
-			writer.write(this.line + "\n");
-			if(this.tempFile != null && this.tempFile.exists()) {
-				writer.write(this.readBody() + "\n");
-			}
-		} catch(final IOException e) {
-			LogLevel.ERROR.printlnToConsole("Can't read the exception contents: " + e.getMessage());
-		}
-	}
-
 }

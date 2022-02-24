@@ -30,6 +30,8 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Options;
 import org.apache.commons.lang3.StringUtils;
 
+import lombok.Getter;
+
 /**
  * This class is responsible for parsing, transforming and holding the application arguments
  *
@@ -48,33 +50,48 @@ public class Log4jParserArgs extends BaseArgs {
 	private static final String OPT_OUTPUT_FILE_PATH = "outputFile";
 	private static final String OPT_SORT = "sort";
 	private static final String FLAG_UNIQUE = "unique";
+	private static final String FLAG_URL_INFO = "urlInfo";
 
+	@Getter
 	private List<LogLevel> logLevels = new ArrayList<>();
+	@Getter
 	private String regexLogLevels = StringUtils.EMPTY;
+	@Getter
 	private String optUserPattern;
+	@Getter
 	private String optInputSourcePath;
+	@Getter
 	private File inputFile;
+	@Getter
 	private String optOutputFilePath;
+	@Getter
 	private String optSort;
+	@Getter
 	private boolean flagUnique;
+	@Getter
 	private String logDateFormat;
+	@Getter
 	private File tempDir;
-
+	@Getter
+	private boolean flagUrlInfo;
+	@Getter(lazy = true)
+	private final Options cmdOptions = initCmdOptions();
+	
 	public Log4jParserArgs(final String[] args) {
 		super(Tool.LOG4J_PARSER.toString(), args);
 	}
 
-	@Override
-	public Options getCmdOptions() {
-		final Options cmdOptions = new Options();
-		cmdOptions.addOption(createOption(OPT_DATE_FORMAT, "Specify the log format of the log entries. Defaults to: " + DEFAULT_LOG_DATE_FORMAT, true, false));
-		cmdOptions.addOption(createOption(OPT_LOG_LEVEL, "A valid log4J log level: " + Arrays.toString(LogLevel.values()) + ". Multiple values can be separated by comma or space.", true, true));
-		cmdOptions.addOption(createOption(OPT_USER_PATTERN, "Pattern to match", true, false));
-		cmdOptions.addOption(createOption(OPT_INPUT_SOURCE_PATH, "Absolute or relative to the current directory path to the logfile (text or zip)", true, true));
-		cmdOptions.addOption(createOption(OPT_OUTPUT_FILE_PATH, "Absolute or relative to the current directory path to the output file. If omitted the standard output is used.", true, false));
-		cmdOptions.addOption(createOption(FLAG_UNIQUE, "Unique lines with occurrence count", false, false));
-		cmdOptions.addOption(createOption(OPT_SORT, "Sort either by date or unique count. This option is only used when '" + FLAG_UNIQUE + "' flag is set. Default to date.", true, false));
-		return cmdOptions;
+	public Options initCmdOptions() {
+		final Options options = new Options();
+		options.addOption(createOption(OPT_DATE_FORMAT, "Specify the log format of the log entries. Defaults to: " + DEFAULT_LOG_DATE_FORMAT, true, false));
+		options.addOption(createOption(OPT_LOG_LEVEL, "A valid log4J log level: " + Arrays.toString(LogLevel.values()) + ". Multiple values can be separated by comma or space.", true, true));
+		options.addOption(createOption(OPT_USER_PATTERN, "Pattern to match", true, false));
+		options.addOption(createOption(OPT_INPUT_SOURCE_PATH, "Absolute or relative to the current directory path to the logfile (text or zip)", true, true));
+		options.addOption(createOption(OPT_OUTPUT_FILE_PATH, "Absolute or relative to the current directory path to the output file. If omitted the standard output is used.", true, false));
+		options.addOption(createOption(FLAG_UNIQUE, "Unique lines with occurrence count", false, false));
+		options.addOption(createOption(OPT_SORT, "Sort either by date or unique count. This option is only used when '" + FLAG_UNIQUE + "' flag is set. Default to date.", true, false));
+		options.addOption(createOption(FLAG_URL_INFO, "Prints all unique urls where the exception occured", false, false));
+		return options;
 	}
 
 	@Override
@@ -111,63 +128,15 @@ public class Log4jParserArgs extends BaseArgs {
 		}
 		this.optSort = cmd.getOptionValue(OPT_SORT, DEFAULT_VALUE_OPT_SORT);
 		this.flagUnique = cmd.hasOption(FLAG_UNIQUE);
-		this.tempDir = new File(this.inputFile.getParent() + "/" + this.inputFile.getName() + ".d");
-	}
-
-	/**
-	 * @return the logLevels
-	 */
-	public List<LogLevel> getLogLevels() {
-		return this.logLevels;
+		this.flagUrlInfo = cmd.hasOption(FLAG_URL_INFO);
+		this.tempDir = new File(this.inputFile.getParent(), this.inputFile.getName() + ".d");
 	}
 
 	public boolean hasLogLevel(final LogLevel level) {
 		return this.logLevels.contains(level);
 	}
 
-	/**
-	 * @return the logDateFormat
-	 */
-	public String getLogDateFormat() {
-		return this.logDateFormat;
-	}
-
-	public String getRegexLogLevels() {
-		return this.regexLogLevels;
-	}
-
-	public String getOptUserPattern() {
-		return this.optUserPattern;
-	}
-
-	public String getOptInputSourcePath() {
-		return this.optInputSourcePath;
-	}
-
-	public File getInputFile() {
-		return this.inputFile;
-	}
-
-	/**
-	 * @return the tmpDir
-	 */
-	public File getTempDir() {
-		return this.tempDir;
-	}
-
-	public String getOutputFilePath() {
-		return this.optOutputFilePath;
-	}
-
 	public boolean isWriteToFileEnabled() {
 		return !"".equals(this.optOutputFilePath) && this.optOutputFilePath != null;
-	}
-
-	public String getOptSort() {
-		return this.optSort;
-	}
-
-	public Boolean isFlagUnique() {
-		return this.flagUnique;
 	}
 }

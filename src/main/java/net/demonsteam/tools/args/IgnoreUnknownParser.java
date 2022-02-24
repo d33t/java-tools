@@ -12,7 +12,7 @@ import org.apache.commons.cli.ParseException;
 import lombok.Getter;
 
 
-public class IngoreUnknownParser extends DefaultParser {
+public class IgnoreUnknownParser extends DefaultParser {
 
 	@Getter
 	private String[] lastParsedUnknownArgs;
