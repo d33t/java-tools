@@ -160,7 +160,9 @@ public class LogEntry implements Comparable<LogEntry> {
 			}
 			if(!entryExists) {
 				try (BufferedWriter bw = new BufferedWriter(new FileWriter(tempUrlFile, true))) {
-					if(!tempUrlFileExists) {
+					if(!tempUrlFileExists 
+							&& !StringUtils.equals(this.getHttpMethod(), logEntry.getHttpMethod())
+							&& !StringUtils.equals(this.getHttpUrl(), logEntry.getHttpUrl())) {
 						bw.write(this.getHttpMethod() + " " + this.getHttpUrl() + "\n");
 					}
 					bw.write(logEntry.getHttpMethod() + " " + logEntry.getHttpUrl() + "\n");
