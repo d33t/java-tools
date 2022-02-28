@@ -52,25 +52,23 @@ import lombok.Setter;
 public class LogEntry implements Comparable<LogEntry> {
 
 	
-	// matching lines of the following form
-	// 16.02.2022 00:00:00.528 *INFO* [service details] message details 
-	private static final String FORMAT_LLS_REGEX = "^([^\\*]+)\\*(%s)\\*\\s((\\[.+(?=\\])\\]))?";
+	// matching lines of the following form 
+	private static final String FORMAT_LS_REGEX = "^([^\\*]+)\\*(%s)\\*\\s\\[.*?(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE|PATCH)\\s(/[^\\s]+)\\sHTTP/1\\.[0-1]\\](\\s(.+?(?=path=(/[a-zA-Z/_:0-9-]+))))?";
+	
 	// log line start (LLS) pattern 
-	private static final Pattern LLS_PATTERN = Pattern.compile(String.format(FORMAT_LLS_REGEX + "(.*)", Arrays.stream(LogLevel.values()).map(LogLevel::toString).collect(Collectors.joining("|"))));
-	// service details regex
-	private static final String SD_REGEX = "\\[.*?(GET|HEAD|POST|PUT|DELETE|CONNECT|OPTIONS|TRACE|PATCH)\\s(/[^\\s]+)\\sHTTP/1\\.[0-1]\\]";
-	private static final Pattern SD_PATTERN = Pattern.compile(SD_REGEX);
+	// GROUP_DATE *GROUP_LOG_LEVEL* [service details GROUP_HTPP_METHOD GROUP_HTTP_URL](GROUP_LOCAL_MESSAGE (path=GROUP_CONTENT_PATH))? GROUP_FULL_MESSAGE
+	private static final Pattern LINE_PATTERN = Pattern.compile(String.format(FORMAT_LS_REGEX + "(.*)", Arrays.stream(LogLevel.values()).map(LogLevel::toString).collect(Collectors.joining("|"))));
 	
-	private static final int LLS_GROUP_DATE = 1;
-	private static final int LLS_GROUP_LOG_LEVEL = 2;
-	private static final int LLS_GROUP_SERVICE_DETAILS = 4;
-	private static final int LLS_GROUP_MESSAGE = 5;
-	
-	private static final int SD_GROUP_HTTP_METHOD = 1;
-	private static final int SD_GROUP_HTTP_URL = 2;
+	private static final int GROUP_DATE = 1;
+	private static final int GROUP_LOG_LEVEL = 2;
+	private static final int GROUP_HTTP_METHOD = 3;
+	private static final int GROUP_HTTP_URL = 4;
+	private static final int GROUP_LOCAL_MESSAGE = 6;
+	private static final int GROUP_CONTENT_PATH = 7;
+	private static final int GROUP_FULL_MESSAGE = 8;
 	
 	@Getter
-	private String line;
+	private String firstLine;
 	@Getter @Setter
 	private long lineNumber;
 	private final SimpleDateFormat sdf;
@@ -98,39 +96,40 @@ public class LogEntry implements Comparable<LogEntry> {
 	private String httpMethod;
 	@Getter
 	private String httpUrl;
+	@Getter
+	private String contentPath;
 	
-	private boolean urlInfoEnabled;
+	private boolean trackUrlsEnabled;
 	
+	  
 	public LogEntry(final String line, final Log4jParserArgs appArgs) throws ParseException {
-		this.line = line;
-		this.tempDirPath = appArgs.getTempDir().getPath();
+		this.firstLine = line;
+		this.tempDirPath = appArgs.getTempDir() != null ? appArgs.getTempDir().getPath() : null;
 		this.sdf = new SimpleDateFormat(appArgs.getLogDateFormat());
 		this.count = 1l;
 		this.sortBy = appArgs.getOptSort();
-		final Matcher llsMatcher = LLS_PATTERN.matcher(line);
+		final Matcher llsMatcher = LINE_PATTERN.matcher(line);
 		if(llsMatcher.find()) {
 			this.newLogEntry = true;
-			this.firstOccurrenceDate = this.lastOccurrenceDate = this.sdf.parse(llsMatcher.group(LLS_GROUP_DATE).trim());
-			String hashable = StringUtils.defaultString(llsMatcher.group(LLS_GROUP_MESSAGE));
-			this.md5Hex = DigestUtils.md5Hex(hashable);
-			this.logLevel = LogLevel.valueOf(llsMatcher.group(LLS_GROUP_LOG_LEVEL));
-			this.serviceDetails = llsMatcher.group(LLS_GROUP_SERVICE_DETAILS);
-			if(StringUtils.isNotBlank(serviceDetails)) {
-				final Matcher sdMatcher = SD_PATTERN.matcher(this.serviceDetails);
-				if(sdMatcher.find()) {
-					this.httpMethod = sdMatcher.group(SD_GROUP_HTTP_METHOD);
-					this.httpUrl = sdMatcher.group(SD_GROUP_HTTP_URL);
-				}
+			this.firstOccurrenceDate = this.lastOccurrenceDate = this.sdf.parse(llsMatcher.group(GROUP_DATE).trim());
+			this.logLevel = LogLevel.valueOf(llsMatcher.group(GROUP_LOG_LEVEL));
+			this.httpMethod = llsMatcher.group(GROUP_HTTP_METHOD);
+			this.httpUrl = llsMatcher.group(GROUP_HTTP_URL);
+			this.contentPath = llsMatcher.group(GROUP_CONTENT_PATH); 
+			String hashable = StringUtils.defaultString(llsMatcher.group(GROUP_LOCAL_MESSAGE));
+			if(StringUtils.isBlank(hashable)) {
+				hashable = llsMatcher.group(GROUP_FULL_MESSAGE);
 			}
+			this.md5Hex = DigestUtils.md5Hex(StringUtils.trimToEmpty(hashable));
 		} else {
 			this.md5Hex = DigestUtils.md5Hex(line);
 		}
-		final String customUserPatternFormat = FORMAT_LLS_REGEX + appArgs.getOptUserPattern();
+		final String customUserPatternFormat = FORMAT_LS_REGEX + appArgs.getOptUserPattern();
 		String userPattern = String.format(customUserPatternFormat, appArgs.getLogLevels().stream()
 		                                   									.map(LogLevel::toString)
 		                                   									.collect(Collectors.joining("|")));
 		this.lineFilterMatching = line.matches(userPattern);
-		this.urlInfoEnabled = appArgs.isFlagUrlInfo();
+		this.trackUrlsEnabled = appArgs.isTrackUrls();
 	}
 
 	public String getBodyMd5() throws IOException {
@@ -149,27 +148,37 @@ public class LogEntry implements Comparable<LogEntry> {
 	}
 
 	public void appendUrl(final LogEntry logEntry) throws IOException {
-		if(urlInfoEnabled && StringUtils.isNotBlank(logEntry.getHttpUrl())) {
+		StringBuilder urlTracker = createUrlTrackingInfo(logEntry);
+		if(trackUrlsEnabled && urlTracker.length() > 0) {
 			File tempUrlFile = new File(this.tempDirPath, this.md5Hex + "_urls");
 			boolean tempUrlFileExists = tempUrlFile.exists();
 			boolean entryExists = false;
 			if(tempUrlFileExists) {
 				try(Stream<String> urlStream = Files.lines(Paths.get(tempUrlFile.getPath()))) {
-					entryExists = urlStream.anyMatch(url -> url.contains(logEntry.getHttpUrl()));
+					entryExists = urlStream.anyMatch(url -> url.contains(urlTracker.toString()));
 				}	
 			}
 			if(!entryExists) {
 				try (BufferedWriter bw = new BufferedWriter(new FileWriter(tempUrlFile, true))) {
-					if(!tempUrlFileExists 
-							&& !StringUtils.equals(this.getHttpMethod(), logEntry.getHttpMethod())
-							&& !StringUtils.equals(this.getHttpUrl(), logEntry.getHttpUrl())) {
-						bw.write(this.getHttpMethod() + " " + this.getHttpUrl() + "\n");
+					StringBuilder currentUrlTracker = createUrlTrackingInfo(this);
+					if(!tempUrlFileExists && currentUrlTracker.length() > 0 
+							&& !StringUtils.equals(currentUrlTracker, urlTracker)) {
+						bw.write(currentUrlTracker.append("\n").toString());
 					}
-					bw.write(logEntry.getHttpMethod() + " " + logEntry.getHttpUrl() + "\n");
+					bw.write(urlTracker.append("\n").toString());
 				}	
 			}
 		}
 	}
+	
+	private StringBuilder createUrlTrackingInfo(LogEntry logEntry) {
+		return  new StringBuilder()
+					.append(StringUtils.trimToEmpty(logEntry.getHttpMethod()))
+					.append(StringUtils.SPACE)
+					.append(StringUtils.trimToEmpty(logEntry.getHttpUrl()))
+					.append(StringUtils.SPACE)
+					.append(StringUtils.trimToEmpty(logEntry.getContentPath()));
+		}
 	
 	public void appendBody(final String line) throws IOException {
 		if(this.tempFile == null) {
@@ -187,12 +196,12 @@ public class LogEntry implements Comparable<LogEntry> {
 	
 	public void writeLogEntryData(final BufferedWriter writer) throws IOException {
 		try {
-			writer.write(this.line + "\n");
+			writer.write(this.firstLine + "\n");
 			if(this.tempFile != null && this.tempFile.exists()) {
 				writer.write(this.readFile(this.tempFile) + "\n");
 			}
 			File tempUrlFile = new File(this.tempDirPath, this.md5Hex + "_urls");
-			if(urlInfoEnabled && tempUrlFile.exists()) {
+			if(trackUrlsEnabled && tempUrlFile.exists()) {
 				writer.write(this.readFile(tempUrlFile) + "\n");
 			}
 		} catch(final IOException e) {
@@ -205,7 +214,7 @@ public class LogEntry implements Comparable<LogEntry> {
 	 */
 	@Override
 	public int compareTo(final LogEntry o) {
-		if(Log4jParserArgs.DEFAULT_VALUE_OPT_SORT.equals(this.sortBy)) {
+		if(Log4jParserArgs.OPT_SORT_BY_DATE.equals(this.sortBy)) {
 			if(this.firstOccurrenceDate == null && o.firstOccurrenceDate == null) {
 				return 0;
 			}
@@ -217,7 +226,7 @@ public class LogEntry implements Comparable<LogEntry> {
 			}
 			return o.firstOccurrenceDate.compareTo(this.firstOccurrenceDate);
 		}
-		return ((Long) o.count).compareTo(this.count);
+		return Long.compare(o.count, this.count);
 	}
 
 	@Override

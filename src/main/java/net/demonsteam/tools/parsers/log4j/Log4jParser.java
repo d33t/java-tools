@@ -31,7 +31,6 @@ import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
@@ -142,7 +141,7 @@ public class Log4jParser {
 				}
 			}
 
-			if(appArgs.isFlagUnique() && uniqueLogEntries.size() > 0) {
+			if(uniqueLogEntries.size() > 0) {
 				if(appArgs.isWriteToFileEnabled()) {
 					LogLevel.INFO.printlnToConsole("Unique exceptions count: %d", uniqueLogEntries.size());
 				}

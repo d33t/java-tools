@@ -18,8 +18,6 @@
  * OR OTHER DEALINGS IN THE SOFTWARE. */
 package net.demonsteam.tools;
 
-import java.util.Arrays;
-
 import net.demonsteam.tools.args.BaseArgs;
 import net.demonsteam.tools.ascii.TextPathToAscii;
 import net.demonsteam.tools.parsers.log4j.Log4jParser;
@@ -90,7 +88,7 @@ public class ToolsRunner {
 		public Options initCmdOptions() {
 			final Options options = new Options();
 			final Tool[] availableTools = Tool.values();
-			options.addOption(createOption(OPT_TOOL, 
+			options.addOption(createOption(null, OPT_TOOL, 
 			                               "Specify the tool to run. Tools: " + StringUtils.join(ArrayUtils.subarray(availableTools, 1, availableTools.length), ", "), true, true));
 			return options;
 		}

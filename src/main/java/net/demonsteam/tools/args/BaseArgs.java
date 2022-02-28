@@ -4,8 +4,6 @@ package net.demonsteam.tools.args;
 import java.util.ArrayList;
 import java.util.List;
 
-import net.demonsteam.tools.parsers.log4j.impl.Log4jParserArgs;
-
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
@@ -58,14 +56,18 @@ public abstract class BaseArgs {
 		System.exit(-1);
 	}
 
-	protected Option createOption(final String longOpt, final String description, final boolean hasArgs, final boolean required) {
-		String shortOption = computeShortOption(longOpt);
-		final Option opt = new Option(shortOption, longOpt, hasArgs, (required ? "" : "(optional) ") + description);
+	protected Option createOption(final String shortOpt, final String longOpt, final String description, final boolean hasArgs, final boolean required) {
+		final Option opt = new Option(shortOpt, longOpt, hasArgs, (required ? "" : "(optional) ") + description);
 		opt.setRequired(required);
 		return opt;
 	}
 	
-	protected String computeShortOption(String longOpt) {
+	protected Option createOption(final String longOpt, final String description, final boolean hasArgs, final boolean required) {
+		String shortOpt = computeShortOpt(longOpt);
+		return createOption(shortOpt, longOpt, description, hasArgs, required);
+	}
+	
+	protected String computeShortOpt(String longOpt) {
 		StringBuilder soBuilder = new StringBuilder();
 		for(int i = 0; i < longOpt.length(); i++) {
 			soBuilder.append(longOpt.charAt(i));

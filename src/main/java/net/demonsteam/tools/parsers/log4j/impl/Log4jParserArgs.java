@@ -41,7 +41,6 @@ import lombok.Getter;
 public class Log4jParserArgs extends BaseArgs {
 
 	public static final String DEFAULT_LOG_DATE_FORMAT = "dd.MM.yyyy HH:mm:ss.SSSS";
-	public static final String DEFAULT_VALUE_OPT_SORT = "date";
 
 	private static final String OPT_DATE_FORMAT = "dateFormat";
 	private static final String OPT_LOG_LEVEL = "loglevel";
@@ -49,8 +48,11 @@ public class Log4jParserArgs extends BaseArgs {
 	private static final String OPT_INPUT_SOURCE_PATH = "inputFile";
 	private static final String OPT_OUTPUT_FILE_PATH = "outputFile";
 	private static final String OPT_SORT = "sort";
+	public static final String OPT_SORT_BY_DATE = "date";
+	private static final String OPT_SORT_BY_UNIQUE_COUNT = "count";
+	private static final String OPT_SORT_DEFAULT_VALUE = OPT_SORT_BY_UNIQUE_COUNT;
 	private static final String FLAG_UNIQUE = "unique";
-	private static final String FLAG_URL_INFO = "urlInfo";
+	private static final String FLAG_TRACK_URLS = "trackUrls";
 
 	@Getter
 	private List<LogLevel> logLevels = new ArrayList<>();
@@ -73,7 +75,7 @@ public class Log4jParserArgs extends BaseArgs {
 	@Getter
 	private File tempDir;
 	@Getter
-	private boolean flagUrlInfo;
+	private boolean trackUrls;
 	@Getter(lazy = true)
 	private final Options cmdOptions = initCmdOptions();
 	
@@ -86,11 +88,11 @@ public class Log4jParserArgs extends BaseArgs {
 		options.addOption(createOption(OPT_DATE_FORMAT, "Specify the log format of the log entries. Defaults to: " + DEFAULT_LOG_DATE_FORMAT, true, false));
 		options.addOption(createOption(OPT_LOG_LEVEL, "A valid log4J log level: " + Arrays.toString(LogLevel.values()) + ". Multiple values can be separated by comma or space.", true, true));
 		options.addOption(createOption(OPT_USER_PATTERN, "Pattern to match", true, false));
-		options.addOption(createOption(OPT_INPUT_SOURCE_PATH, "Absolute or relative to the current directory path to the logfile (text or zip)", true, true));
+		options.addOption(createOption(OPT_INPUT_SOURCE_PATH, "Absolute or relative to the current directory path to the logfile (text or zip with no nested directories)", true, true));
 		options.addOption(createOption(OPT_OUTPUT_FILE_PATH, "Absolute or relative to the current directory path to the output file. If omitted the standard output is used.", true, false));
-		options.addOption(createOption(FLAG_UNIQUE, "Unique lines with occurrence count", false, false));
-		options.addOption(createOption(OPT_SORT, "Sort either by date or unique count. This option is only used when '" + FLAG_UNIQUE + "' flag is set. Default to date.", true, false));
-		options.addOption(createOption(FLAG_URL_INFO, "Prints all unique urls where the exception occured", false, false));
+		options.addOption(createOption(FLAG_UNIQUE, "If enabled will keep track of the unqiue entries (useful with sorting), if disabled (default) the output will be immmediately written to the output stream (no sorting possible).", false, false));
+		options.addOption(createOption(OPT_SORT, "Sort either by '" + OPT_SORT_BY_DATE + "' or by unique '" + OPT_SORT_BY_UNIQUE_COUNT + "'. This option is only used when '" + FLAG_UNIQUE + "' flag is set. Default to '" + OPT_SORT_DEFAULT_VALUE + "'.", true, false));
+		options.addOption(createOption(FLAG_TRACK_URLS, "Keeps tracks of all extracted unique urls", false, false));
 		return options;
 	}
 
@@ -126,9 +128,9 @@ public class Log4jParserArgs extends BaseArgs {
 				this.optOutputFilePath = executionPath + "/" + this.optOutputFilePath;
 			}
 		}
-		this.optSort = cmd.getOptionValue(OPT_SORT, DEFAULT_VALUE_OPT_SORT);
+		this.optSort = cmd.getOptionValue(OPT_SORT, OPT_SORT_DEFAULT_VALUE);
 		this.flagUnique = cmd.hasOption(FLAG_UNIQUE);
-		this.flagUrlInfo = cmd.hasOption(FLAG_URL_INFO);
+		this.trackUrls = cmd.hasOption(FLAG_TRACK_URLS);
 		this.tempDir = new File(this.inputFile.getParent(), this.inputFile.getName() + ".d");
 	}
 
